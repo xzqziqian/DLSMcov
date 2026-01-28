@@ -1,8 +1,69 @@
-load("sdres_newpr_comp1.RData")  #  bio 0.5 b1 0.5
+setwd("~/Library/CloudStorage/GoogleDrive-zxu9@nd.edu/My Drive/projects/DLSMcov/shandong")
+load("shandong.RData")
+Y.pre = shandong[[1]][1:3]
+n = 71
+TT = 3
+Y = array(as.numeric(unlist(Y.pre)), dim=c(n, n, TT))
+
+# Y[is.na(Y)] <-0
+ncov = 2
+C = array(NA, dim = c(n, ncov, TT))
+for (t in 1:TT) {
+  c1 <- shandong[[2]][[t]][, 'lone']
+  c2 <- shandong[[2]][[t]][, 'extroversion']
+  for (i in 1:n){
+    C[i, 1, t] = c1[i]
+    C[i, 2, t] = c2[i]
+  }
+}
+
+# C[,1,] <- scale(C[,1,], scale = F, center = T)
+# C[,2,] <- scale(C[,2,], scale = F, center = T)
+# C[is.na(C)] <- 0
+C[,1,] <- C[,1,] - mean(C[,1,], na.rm = T)
+C[,2,] <- C[,2,] - mean(C[,2,], na.rm = T)
+
+
+for (t in 1:TT) {
+  cat("\nCorrelation matrix at time", t, ":\n")
+  print(cor(C[,,t], use = "pairwise.complete.obs"))
+}
+
+
+library(reshape2)
+
+for (cov_idx in 1:ncov) {
+  cov_mat <- C[, cov_idx, ]
+  colnames(cov_mat) <- paste0("T", 1:TT)
+  cat("\nTemporal correlation for covariate", cov_idx, ":\n")
+  print(cor(cov_mat, use = "pairwise.complete.obs"))
+}
+
+
+library(car)
+
+for (t in 1:TT) {
+  df <- as.data.frame(C[,,t])
+  colnames(df) <- c("lone", "extroversion")
+  cat("\nVIF at time", t, ":\n")
+  vif_model <- lm(rnorm(n) ~ ., data = df)  # dummy dependent variable
+  print(vif(vif_model))
+}
+
+
+
+
+
+
+
+
+
+
+load("sdres_newpr_centerts.RData")  #  bio 0.5 b1 0.5
 # load("sdres1_smallstep.RData")  # bio 0.005 b1 0.05
 Bin = chaindat$Bin; Bout = chaindat$Bout; w = chaindat$w; X = chaindat$X; phi = chaindat$phi; s2 = chaindat$s2; t2 = chaindat$t2; sigmaZ = chaindat$sigmaZ; B1 = chaindat$B1; alpha = chaindat$alpha; sigma0 = chaindat$sigma0; mu0 = chaindat$mu0; C = chaindat$C; Y = chaindat$Y
-N = 250000
-burnin = 50000
+N = 1000000
+burnin = 300000
 thin = 10
 select = seq(burnin, N, by = thin)
 n =  71
@@ -10,11 +71,16 @@ TT = 3
 p = 2
 
 
+effectiveSize(Bin[select])
+effectiveSize(Bout[select])
+effectiveSize(B1[1,select])
+effectiveSize(B1[2, select])
+effectiveSize(t2[,select])
+effectiveSize(s2[,select])
 ########### geweke
 library(coda)
 f1 = 0.1
 f2 = 0.5
-burnin = 50000
 geweke_results <- list(
   Bin = geweke.diag(Bin[select], f1, f2),
   Bout = geweke.diag(Bout[select], f1, f2),
@@ -49,7 +115,7 @@ heidel.diag(B1[2,select])
 
 ################## visualize covariate
 # C<-round(C)
-pdf(file="figs/covar.pdf")
+pdf(file="figs/sdcovar.pdf")
 c1mean <- apply(C[,1,], 2, mean)
 c2mean <- apply(C[,2,], 2, mean)
 plot(c1mean, type = 'l' , col = 'black', lwd = 2, ylim = c(-0.5,2),
@@ -67,14 +133,14 @@ dev.off()
 #################### MCMC  plots 
 
 for (var in c("Bin", "Bout","s2", "t2")){
-  pdf(paste0("figs/", var, ".pdf"), width = 8, height = 4)
+  pdf(paste0("figs/sd", var, ".pdf"), width = 8, height = 4)
   par(mfrow = c(1, 1))
   plot(chaindat[[var]][1:N], type = 'l', col = 'black', lwd = 1, xlab = 'iteration', ylab = var)
   # plot(density(chaindat[[var]]), col = 'black', lwd = 1, xlab = var, main = '')
   dev.off()
 }
 
-pdf(paste0("figs/", "Bin", ".pdf"), width = 8, height = 4)
+pdf(paste0("figs/sd", "Bin", ".pdf"), width = 8, height = 4)
 par(mfrow = c(1, 1))
 plot(chaindat$Bin[1:N], type = 'l', col = 'black', lwd = 1, xlab = 'iteration', ylab = "Bin", ylim= c(-0.3, 1))
 # plot(density(chaindat[[var]]), col = 'black', lwd = 1, xlab = var, main = '')
@@ -83,7 +149,7 @@ dev.off()
 ncov = 2
 for (var in c("phi", "sigmaZ", "B1")){
   for (i in 1:ncov){
-    pdf(paste0("figs/", var, i, ".pdf"), width = 8, height = 4)
+    pdf(paste0("figs/sd", var, i, ".pdf"), width = 8, height = 4)
     par(mfrow = c(1, 1))
     varn = var
     if (var == 'B1') {varn = 'B'}
@@ -142,22 +208,50 @@ Es0;Em0
 
 
 es <- data.frame(mean = c( EB1[1], EB1[2], EBin, EBout, Es2, Et2,
-                          Ephi[1], Ephi[2], 
-                          EsigmaZ[1], EsigmaZ[2]))
+                           Ephi[1], Ephi[2], 
+                           EsigmaZ[1], EsigmaZ[2]))
 es$lower <- c( qB11[1], qB12[1],  
-              qBin[1], qBout[1], qs2[1], qt2[1], 
-              qphi1[1], qphi2[1], qsigmaZ1[1], qsigmaZ2[1])
+               qBin[1], qBout[1], qs2[1], qt2[1], 
+               qphi1[1], qphi2[1], qsigmaZ1[1], qsigmaZ2[1])
 es$upper <- c( qB11[2], qB12[2], 
-              qBin[2], qBout[2], qs2[2], qt2[2], 
-              qphi1[2], qphi2[2], qsigmaZ1[2], qsigmaZ2[2])
+               qBin[2], qBout[2], qs2[2], qt2[2], 
+               qphi1[2], qphi2[2], qsigmaZ1[2], qsigmaZ2[2])
 es$var <- c('B1_1', 'B1_2', 'Bin', 'Bout', 's2', 't2', 'phi_1', 'phi_2',  'sigmaZ_1', 'sigmaZ_2')
-es
+library(dplyr)
+es %>% mutate_if(is.numeric, round, 3)
 
 kable(es[,c(4,1:3)], booktabs = T, caption = "means", format = 'latex', digits = 3)
 library(kableExtra)
 kable(es[,c(4, 1:3)], digits = 3, format = "html", caption = "Formatted Table for PowerPoint") %>%
   kable_styling(full_width = FALSE, position = "center") %>%
   row_spec(0, bold = TRUE) # Make the header bold
+
+##################### ar1 residual autocor
+
+
+eps <- array(NA, dim = c(n, ncov, TT))
+
+for (k in 1:ncov) {
+  for (i in 1:n) {
+    eps[i, k, 1] <- C[i, k, 1] - Em0[k]
+    for (t in 2:TT) {
+      eps[i, k, t] <- C[i, k, t] - Ephi[k] * C[i, k, t-1]
+    }
+  }
+}
+
+par(mfrow = c(ncov, 1))
+names = c('lone', 'extroversion')
+for (k in 1:ncov) {
+  acf(as.vector(eps[1, k, ]), main = paste("ACF residuals for ", names[k]))
+}
+
+lag1_cor <- apply(eps[, k, ], 1, function(x) {
+  if (length(x) < 3) return(NA)
+  cor(x[-length(x)], x[-1])
+})
+
+
 
 ################## plot of predictors against Y
 
@@ -201,7 +295,7 @@ ggplot(data, aes(x=dist))+
   theme_minimal(base_size = 18) + 
   theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
         panel.border = element_rect(colour = "black", fill=NA, size=0.5))
-  xlab("distance between latent positions") +
+xlab("distance between latent positions") +
   ylab("density")
 dev.off()
 
@@ -260,12 +354,19 @@ xl <- c(1.15*min(EX[1,,]),1.15*max(EX[1,,]))
 yl <- c(1.15*min(EX[2,,]),1.15*max(EX[2,,]))
 lims <- range(c(xl,yl))
 
+color_scale <- colorRampPalette(c("#addfed", "#0f414f"))
+C_min <- min(C[,1,], na.rm=TRUE)
+C_max <- max(C[,1,], na.rm=TRUE)
+C_scaled <- (C[,1,] - C_min) / (C_max - C_min + 1e-6) # Avoid division by zero
+colors <- color_scale(500) # Generate 100 colors
 
-pdf(file="figs/lps.pdf",width=8,height=8)
+
+pdf(file="figs/sdlps_wp.pdf",width=8,height=8)
 par(mar=c(2,2,4,2))
 for(tt in 1:TT){
+  col_vec <- colors[round(C_scaled[, tt] * 499) + 1]  # Map to color index (covariate 1)
   plot(t(EX[,tt,]),xlim=lims,ylim=lims,xlab="",ylab="",
-       pch=16,cex=(C[, 1, tt] + abs(min(C[,1,tt])))*0.5,xaxt="n",yaxt="n",
+       pch=16,cex=1,xaxt="n",yaxt="n", col = col_vec,
        main="")
   if(tt>1) arrows(EX[1,tt-1,],EX[2,tt-1,],EX[1,tt,],EX[2,tt,],length=0.05, col = 'blue')
   #  if(tt==1) textxy(EX[1,tt,],EX[2,tt,],labs=c(1:26)[-21]) #load "calibrate" package
@@ -274,7 +375,7 @@ for(tt in 1:TT){
 dev.off()
 
 
-pdf(file="figs/lpsff.pdf",width=8,height=8)
+pdf(file="figs/sdlpsff.pdf",width=8,height=8)
 par(mar=c(2,2,4,2))
 plot(t(EX[,1,]),xlim=lims,ylim=lims,xlab="",ylab="",
      pch=16,cex=C[, 1, 1]*0.15,xaxt="n",yaxt="n",
@@ -376,6 +477,30 @@ if(MissData){
   AUCPMean <- slot(performance( pred, "auc"),"y.values")[[1]]  
 }
 print(AUCPMean)# all term 0.9546134 only network 0.9546088
+pr_curve <- performance(pred, "prec", "rec")
+plot(pr_curve, colorize = TRUE)
+precision <- pr_curve@y.values[[1]]
+recall    <- pr_curve@x.values[[1]]
+threshold <- pr_curve@alpha.values[[1]]
+f1 <- 2 * precision * recall / (precision + recall)
+
+# remove NA values
+valid <- which(!is.na(f1))
+best_idx <- valid[which.max(f1[valid])]
+
+best_threshold <- threshold[best_idx]
+best_precision <- precision[best_idx]
+best_recall    <- recall[best_idx]
+
+best_threshold
+best_precision
+best_recall
+plot(pr_curve, colorize = TRUE)
+abline(v=best_recall, col='#5a95a6')
+abline(h=best_precision, col='#5a95a6')
+text(0.65, 0.76, paste0('cutoff = ', round(best_threshold,3)), cex = 1)
+
+
 set.seed(12)
 predYbin <- ifelse(predY>runif(dim(Y)), 1,0)
 mean(predYbin == Y) # all terms 0.8334325 0.8341599
@@ -387,7 +512,7 @@ cutoffs <- cutoffs[order(cutoffs$tpr+cutoffs$fpr , decreasing=TRUE),]
 cf = subset(cutoffs, fpr < 0.1)[1,]
 
 
-pdf("figsnew/ROC.pdf", width = 6, height = 6)
+pdf("figs/sdROC.pdf", width = 6, height = 6)
 par(mar=c(5,5,2,2))
 plot(perf, lwd = 2, cex.lab = 1.5, cex.axis = 1,
      xlab = 'false positive rate', ylab = 'true positive rate')
@@ -415,7 +540,7 @@ plot(moves[1,], type = 'l')
 for (i in 2:TT){
   lines(moves[i,], col = 'black')
 }
-pdf("figs/moves.pdf", width = 10, height = 6)
+pdf("figs/sdmoves.pdf", width = 10, height = 6)
 par(mar=c(5,5,2,2))
 boxplot(moves, outline= F, xlab = 'year', ylab = 'moving distance from year to year', col = '#5a95a6', cex.lab = 2, cex.axis = 1.5)
 dev.off()

@@ -2,7 +2,7 @@
 ### data loading
 
 
-setwd("/Volumes/GoogleDrive/My Drive/projects/DLSMcov/shandong")
+setwd("~/Library/CloudStorage/GoogleDrive-zxu9@nd.edu/My Drive/projects/DLSMcov/shandong")
 load("shandong.RData")
 Y.pre = shandong[[1]][1:3]
 n = 71
@@ -20,13 +20,19 @@ for (t in 1:TT) {
     C[i, 2, t] = c2[i]
   }
 }
-# C[is.na(C)] <- 0
 
+# C[,1,] <- scale(C[,1,], scale = F, center = T)
+# C[,2,] <- scale(C[,2,], scale = F, center = T)
+# C[is.na(C)] <- 0
+C[,1,] <- C[,1,] - mean(C[,1,], na.rm = T)
+C[,2,] <- C[,2,] - mean(C[,2,], na.rm = T)
+
+save(Y, C, file = "ds2min.RData")
 
 ### setup
 
 #Number of MCMC iterations
-N = 500000
+N = 1000000
 #Dimension of the Euclidean latent space
 p=2
 #Use log likelihood approximation (BOOLEAN)?
@@ -91,29 +97,29 @@ system.time({
     if (chain == 2){
       soure("initialize2.R")
     }else{
-      source("initialize_ds1.R")
+      source("initialize.R")
     }
-  
-    # load("sdres_newpr_comp1.RData")
-    # nt <- 500000
-    # Bin[1:nt] <- chaindat$Bin
-    # Bout[1:nt] <- chaindat$Bout
-    # B1[, 1:nt] <- chaindat$B1
-    # s2[1:nt] <- chaindat$s2
-    # t2[1:nt] <- chaindat$t2
-    # mu0[,1:nt] <- chaindat$mu0
-    # sigma0[,1:nt] <- chaindat$sigma0
-    # phi[,1:nt] <- chaindat$phi
-    # sigmaZ[,1:nt] <- chaindat$sigmaZ
-    # AccRate <- chaindat$AccRate
-    # X <- chaindat$X
-    # w[,1:nt] <- chaindat$w
-    # C = chaindat$C
-    # Y = chaindat$Y
+    
+    load("sdres_newpr_centerts.RData")
+    nt <- 500000
+    Bin[1:nt] <- chaindat$Bin
+    Bout[1:nt] <- chaindat$Bout
+    B1[, 1:nt] <- chaindat$B1
+    s2[1:nt] <- chaindat$s2
+    t2[1:nt] <- chaindat$t2
+    mu0[,1:nt] <- chaindat$mu0
+    sigma0[,1:nt] <- chaindat$sigma0
+    phi[,1:nt] <- chaindat$phi
+    sigmaZ[,1:nt] <- chaindat$sigmaZ
+    AccRate <- chaindat$AccRate
+    X <- chaindat$X
+    w[,1:nt] <- chaindat$w
+    C = chaindat$C
+    Y = chaindat$Y
     
     set.seed(1*chain)
     pb <- txtProgressBar(min=2,max=N,style=3)
-    for(it in 2:N){
+    for(it in 825690:N){
       RN <- rnorm(n*TT*p)
       RNBIO <- rnorm(2)
       RNB1 <- rnorm(ncov)
@@ -215,14 +221,14 @@ system.time({
       }
       
       
-      # if(it%%20000==0){
-        # chaindat <- list(Bin = Bin, Bout = Bout,
-        #                  B1 = B1, s2 = s2,
-        #                  t2 = t2, mu0 = mu0,
-        #                  sigma0 = sigma0, phi = phi,  sigmaZ = sigmaZ,
-        #                  AccRate = AccRate, X = X, w = w, C = C, Y = Y)
-        # save(chaindat, file = paste0("sdres_newpr_comp", chain, ".RData"))
-      # }
+      if(it%%100000==0){
+        chaindat <- list(Bin = Bin, Bout = Bout,
+                         B1 = B1, s2 = s2,
+                         t2 = t2, mu0 = mu0,
+                         sigma0 = sigma0, phi = phi,  sigmaZ = sigmaZ,
+                         AccRate = AccRate, X = X, w = w, C = C, Y = Y)
+        save(chaindat, file = paste0("sdres_newpr_centerts.RData"))
+      }
       setTxtProgressBar(pb,it)
     }
     close(pb)
@@ -268,3 +274,5 @@ geweke.diag(B1[1,nst:ntemp][seq(1, ntemp-nst, 10)], 0.1, 0.5)
 geweke.diag(B1[2,nst:ntemp][seq(1, ntemp-nst, 10)], 0.1, 0.5)
 geweke.diag(s2[nst:ntemp][seq(1, ntemp-nst, 10)], 0.1, 0.5)
 geweke.diag(t2[nst:ntemp][seq(1, ntemp-nst, 10)], 0.1, 0.5)
+
+

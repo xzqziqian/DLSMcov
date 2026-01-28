@@ -9,22 +9,27 @@ Yold = array(as.numeric(unlist(Y.pre)), dim=c(n, n, TT))
 Yold[Yold<3] <-0
 Yold[Yold>=3] <-1
 
+for (t in 1:TT){
+  print(mean(is.na(Yold[,,t])))
+}
+
 ncov = 3
 Cold = array(NA, dim = c(n, ncov, TT))
+
 for (t in 1:TT) {
+  c1 <- scale(guangzhou$covar[[t+1]]$social, center = F, scale = F)
+  c2 <- scale(guangzhou$covar[[t+1]]$happy, center = F, scale = F)
+  c3 <- scale(guangzhou$covar[[t+1]]$pressure, center = F, scale = F)
   for (i in 1:n){
-    # C[i, 1, t] = scale(guangzhou$covar[[t+1]]$social[i], scale = T)
-    # C[i, 2, t] = scale(guangzhou$covar[[t+1]]$happy[i], scale = T)
-    # C[i, 3, t] = scale(guangzhou$covar[[t+1]]$friends_hours[i], scale = T)
-    Cold[i, 1, t] = guangzhou$covar[[t+1]]$social[i]
-    Cold[i, 2, t] = guangzhou$covar[[t+1]]$happy[i]
-    Cold[i, 3, t] = guangzhou$covar[[t+1]]$pressure[i]
+    Cold[i, 1, t] = c1[i]
+    Cold[i, 2, t] = c2[i]
+    Cold[i, 3, t] = c3[i]
   }
 }
 
-# C[is.na(C)] <- 0
-
-
+# Cold[,1,] <- scale(Cold[,1,], center = T, scale = F)
+# Cold[,2,] <- scale(Cold[,2,], center = T, scale = F)
+# Cold[,3,] <- scale(Cold[,3,], center = T, scale = F)
 
 indrm <- c(1, 11, 21, 31, 41, 14, 19, 23, 25, 26, 42)
 n = 47 - length(indrm)
@@ -35,6 +40,10 @@ for (t in 1:TT){
   Y[,,t] = Yold[-indrm, -indrm, t]
   C[,,t] = Cold[-indrm,,t]
 }
+
+C[,1,] = C[,1,] - mean(C[,1,], na.rm = T)
+C[,2,] = C[,2,] - mean(C[,2,], na.rm = T)
+C[,3,] = C[,3,] - mean(C[,3,], na.rm = T)
 # Y[is.na(Y)] <-0
 
 
@@ -128,37 +137,37 @@ system.time({
     if (chain == 2){
       source("initialize2.R")
     }else{
-      source("initialize_ds1.R")
+      source("initialize.R")
     }
     
-    load("/Users/ziqianxu/Desktop/gzresalt_newpr1.RData")
-    nt <- 50000
-    Bin[1:nt] <- chaindat$Bin
-    Bout[1:nt] <- chaindat$Bout
-    B1[, 1:nt] <- chaindat$B1
-    s2[1:nt] <- chaindat$s2
-    t2[1:nt] <- chaindat$t2
-    mu0[,1:nt] <- chaindat$mu0
-    sigma0[,1:nt] <- chaindat$sigma0
-    phi[,1:nt] <- chaindat$phi
-    sigmaZ[,1:nt] <- chaindat$sigmaZ
-    AccRate <- chaindat$AccRate
-    X <- chaindat$X
-    w[,1:nt] <- chaindat$w
-    C = chaindat$C
-    Y = chaindat$Y
+    # load("/Users/ziqianxu/Desktop/gzresalt_newpr1.RData")
+    # nt <- 50000
+    # Bin[1:nt] <- chaindat$Bin
+    # Bout[1:nt] <- chaindat$Bout
+    # B1[, 1:nt] <- chaindat$B1
+    # s2[1:nt] <- chaindat$s2
+    # t2[1:nt] <- chaindat$t2
+    # mu0[,1:nt] <- chaindat$mu0
+    # sigma0[,1:nt] <- chaindat$sigma0
+    # phi[,1:nt] <- chaindat$phi
+    # sigmaZ[,1:nt] <- chaindat$sigmaZ
+    # AccRate <- chaindat$AccRate
+    # X <- chaindat$X
+    # w[,1:nt] <- chaindat$w
+    # C = chaindat$C
+    # Y = chaindat$Y
     
-
+    
     # set.seed(1*chain)
     pb <- txtProgressBar(min=2,max=N,style=3)
-    for(its in 606360:(N*thin)){ #(2*thin):(N*thin)
+    for(its in 106150:(N*thin)){ #(2*thin):(N*thin)
       it <- floor(its/thin)
       RN <- rnorm(n*TT*p)
       RNBIO <- rnorm(2)
       RNB1 <- rnorm(ncov)
       RNA <- 0.02*rnorm(1)
-
-    
+      
+      
       if(its %% thin == 0){
         Draws <- c.update1(X[[it-1]],c(n,p,TT,1),tuneX,Y,
                            Bin[it-1],Bout[it-1],tuneBIO,w[,it-1],
@@ -171,36 +180,36 @@ system.time({
                            nuOut,CAUCHY=0,RN,RNBIO, RNB1, tuneB1, B1[,it], xiB1, nuB1, C, ncov)
       }
       
-
-        X[[it]] <- Draws[[1]]
-        Bin[it] <- Draws[[2]]
-        Bout[it] <- Draws[[3]]
-        B1[,it] <- Draws[[4]]
-        AccRate <- AccRate + Draws[[5]]
-        if(it==burnin){
-          Xit0 <- t(X[[it]][,1,])
-          for(tt in 2:TT) Xit0 <- rbind(Xit0,t(X[[it]][,tt,]))
+      
+      X[[it]] <- Draws[[1]]
+      Bin[it] <- Draws[[2]]
+      Bout[it] <- Draws[[3]]
+      B1[,it] <- Draws[[4]]
+      AccRate <- AccRate + Draws[[5]]
+      if(it==burnin){
+        Xit0 <- t(X[[it]][,1,])
+        for(tt in 2:TT) Xit0 <- rbind(Xit0,t(X[[it]][,tt,]))
+      }
+      if(it>burnin){
+        XitCentered <- t(X[[it]][,1,])
+        for(tt in 2:TT) XitCentered <- rbind(XitCentered,t(X[[it]][,tt,]))
+        procr <- vegan::procrustes(X=Xit0,Y=XitCentered,scale=FALSE)$Yrot
+        for(tt in 1:TT){
+          X[[it]][,tt,] <- t(procr[((tt-1)*n+1):(tt*n),])
         }
-        if(it>burnin){
-          XitCentered <- t(X[[it]][,1,])
-          for(tt in 2:TT) XitCentered <- rbind(XitCentered,t(X[[it]][,tt,]))
-          procr <- vegan::procrustes(X=Xit0,Y=XitCentered,scale=FALSE)$Yrot
-          for(tt in 1:TT){
-            X[[it]][,tt,] <- t(procr[((tt-1)*n+1):(tt*n),])
-          }
-        }
-        if(it < N) X[[it+1]] <- X[[it]]
-    
- 
+      }
+      if(it < N) X[[it+1]] <- X[[it]]
+      
+      
       
       #------------------Step 2--------------------------------
-        Draws1 <- c.t2s2Parms(X[[it]],c(n,p,TT,1),shapeT2,
-                              shapeS2,scaleT2,scaleS2)
+      Draws1 <- c.t2s2Parms(X[[it]],c(n,p,TT,1),shapeT2,
+                            shapeS2,scaleT2,scaleS2)
       
-
-        t2[it] <- rinvgamma(1,shape=Draws1[[1]],scale=Draws1[[2]])
-        s2[it] <- rinvgamma(1,shape=Draws1[[3]],scale=Draws1[[4]])
-    
+      
+      t2[it] <- rinvgamma(1,shape=Draws1[[1]],scale=Draws1[[2]])
+      s2[it] <- rinvgamma(1,shape=Draws1[[3]],scale=Draws1[[4]])
+      
       
       
       for(q in 1:ncov){
@@ -210,27 +219,27 @@ system.time({
           Drawsphisig <- c.phisigmazParms(X[[it]], c(n, p, TT, 1), thetaZ, phiZ, xiPhi, nuPhi, sigmaZ[q,it], C[,q,], phi[q,it], xi0, nu0, theta0, phi0, sigma0[q,it], mu0[q, it])
         }
         
-          sigmaZ[q, it] <- rinvgamma(1, shape=Drawsphisig[[1]], scale=Drawsphisig[[2]])
-          phi[q, it] <- rnorm(1, mean=Drawsphisig[[3]], sd=sqrt(Drawsphisig[[4]]))
-          if(is.nan(phi[q, it])){
-            phi[q, it] <- phi[q, it-1]
-            print("phi is nan")
-          }
-          if(is.nan(sigmaZ[q, it]) | is.infinite(sigmaZ[q,it])){
-            sigmaZ[q, it] <- sigmaZ[q, it-1]
-            print("sigmaz is nan")
-          }
-          sigma0[q, it] <- rinvgamma(1, shape = Drawsphisig[[5]], scale = Drawsphisig[[6]])
-          mu0[q,it] <- rnorm(1, mean=Drawsphisig[[7]], sd=sqrt(Drawsphisig[[8]]))
-    
-       
-   
-
+        sigmaZ[q, it] <- rinvgamma(1, shape=Drawsphisig[[1]], scale=Drawsphisig[[2]])
+        phi[q, it] <- rnorm(1, mean=Drawsphisig[[3]], sd=sqrt(Drawsphisig[[4]]))
+        if(is.nan(phi[q, it])){
+          phi[q, it] <- phi[q, it-1]
+          print("phi is nan")
+        }
+        if(is.nan(sigmaZ[q, it]) | is.infinite(sigmaZ[q,it])){
+          sigmaZ[q, it] <- sigmaZ[q, it-1]
+          print("sigmaz is nan")
+        }
+        sigma0[q, it] <- rinvgamma(1, shape = Drawsphisig[[5]], scale = Drawsphisig[[6]])
+        mu0[q,it] <- rnorm(1, mean=Drawsphisig[[7]], sd=sqrt(Drawsphisig[[8]]))
+        
+        
+        
+        
       }
       
       #------------------Step 3--------------------------------
       
-     
+      
       if (its %% thin == 0){
         w[,it] <- rdirichlet(1,alpha=Kappa*w[,it-1])
         Draws2 <- c.WAccProb1(X[[it]],c(n,p,TT,1),Y,
@@ -239,12 +248,12 @@ system.time({
         Draws2 <- c.WAccProb1(X[[it]],c(n,p,TT,1),Y,
                               Bin[it],Bout[it],Kappa,w[,it],rdirichlet(1,alpha=Kappa*w[,it]), C, B1[,it], ncov)
       }
-     
-
+      
+      
       w[,it] <- Draws2[[1]]
       AccRate[ncov + 2 + 1] <- AccRate[ncov + 2 + 1] + Draws2[[2]]
-    
-     
+      
+      
       
       #------------------Step 4--------------------------------
       
@@ -261,19 +270,19 @@ system.time({
         C[C>cr[2]] = cr[2]
         C[C<cr[1]] = cr[1]
       }
-
+      
       chain = 1
-      if(its%%50000==0){
+      if(its%%100000==0){
         chaindat <- list(Bin = Bin, Bout = Bout,
                          B1 = B1, s2 = s2,
                          t2 = t2, mu0 = mu0,
                          sigma0 = sigma0, phi = phi,  sigmaZ = sigmaZ,
                          AccRate = AccRate, X = X, w = w, C = C, Y = Y)
-        save(chaindat, file = paste0("/Users/ziqianxu/Desktop/gzresalt_newpr", chain, ".RData"))
+        save(chaindat, file = paste0("/Users/ziqianxu/Desktop/gzresalt_center", chain, ".RData"))
       }
       setTxtProgressBar(pb,it)
     }
-      close(pb)
+    close(pb)
   }
 })
 AccRate[1:10]/(it-1)
@@ -307,8 +316,8 @@ rowMeans(B1)
 mean(Bin)
 mean(Bout)
 
-ntemp = 50000
-nst = 5000
+ntemp = 55500
+nst = 15000
 thinst = 5
 geweke.diag(Bin[nst:ntemp][seq(1, ntemp-nst, thinst)])
 geweke.diag(Bout[nst:ntemp][seq(1, ntemp-nst, thinst)])

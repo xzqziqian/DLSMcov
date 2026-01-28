@@ -12,10 +12,13 @@ Yold[Yold>=3] <-1
 ncov = 3
 Cold = array(NA, dim = c(n, ncov, TT))
 for (t in 1:TT) {
+  c1 <- scale(guangzhou$covar[[t+1]]$social, center = T, scale = F)
+  c2 <- scale(guangzhou$covar[[t+1]]$happy, center = T, scale = F)
+  c3 <- scale(guangzhou$covar[[t+1]]$pressure, center = T, scale = F)
   for (i in 1:n){
-    Cold[i, 1, t] = guangzhou$covar[[t+1]]$social[i]
-    Cold[i, 2, t] = guangzhou$covar[[t+1]]$happy[i]
-    Cold[i, 3, t] = guangzhou$covar[[t+1]]$pressure[i]
+    Cold[i, 1, t] = c1[i]
+    Cold[i, 2, t] = c2[i]
+    Cold[i, 3, t] = c3[i]
   }
 }
 
@@ -30,6 +33,67 @@ for (t in 1:TT){
 }
 
 
+C[,1,] = C[,1,] - mean(C[,1,], na.rm = T)
+C[,2,] = C[,2,] - mean(C[,2,], na.rm = T)
+C[,3,] = C[,3,] - mean(C[,3,], na.rm = T)
+
+
+for (t in 1:TT) {
+  cat("\nCorrelation matrix at time", t, ":\n")
+  corr_mat <- cor(C[,,t], use = "pairwise.complete.obs")
+  print(corr_mat)
+  
+  # Exclude diagonal by setting it to NA
+  diag(corr_mat) <- NA
+  
+  # Find min and max
+  max_corr <- max(corr_mat, na.rm = TRUE)
+  min_corr <- min(corr_mat, na.rm = TRUE)
+  
+  cat("Max correlation (off-diagonal):", round(max_corr, 3), "\n")
+  cat("Min correlation (off-diagonal):", round(min_corr, 3), "\n")
+}
+
+library(reshape2)
+
+library(ggplot2)
+library(reshape2)
+
+names = c('social', 'happy', 'pressure')
+for (cov_idx in 1:ncov) {
+  cov_mat <- C[, cov_idx, ]
+  colnames(cov_mat) <- paste0("T", 1:TT)
+  
+  # Compute temporal correlation
+  corr_mat <- cor(cov_mat, use = "pairwise.complete.obs")
+  cat("\nTemporal correlation for covariate", cov_idx, ":\n")
+  print(corr_mat)
+  
+  # Melt for ggplot
+  corr_melt <- melt(corr_mat)
+  colnames(corr_melt) <- c("Time1", "Time2", "Correlation")
+  
+  # Plot
+  ggplot(corr_melt, aes(x = Time1, y = Time2, fill = Correlation)) +
+    geom_tile(color = "white") +
+    scale_fill_gradient2(low = "blue", mid = "white", high = "red", midpoint = 0,
+                         limits = c(-1,1), name = "Correlation") +
+    theme_minimal() +
+    labs(title = paste("Temporal correlation heatmap for covariate", names[cov_idx]),
+         x = "Time", y = "Time") +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1))
+}
+
+library(car)
+
+for (t in 1:TT) {
+  df <- as.data.frame(C[,,t])
+  colnames(df) <- c("lone", "extroversion")
+  cat("\nVIF at time", t, ":\n")
+  vif_model <- lm(rnorm(n) ~ ., data = df)  # dummy dependent variable
+  print(vif(vif_model))
+}
+
 
 
 
@@ -39,7 +103,7 @@ pdf(file="figs/covar.pdf", width = 8, height = 4)
 par(mfrow = c(1, 1))
 c1mean <- apply(C[,1,], 2, mean, na.rm = T)
 plot(c1mean, type = 'l' , col = 'black', lwd = 2,
-     xlab = 'week', ylab = 'covariate value', ylim = c(2, 4))
+     xlab = 'week', ylab = 'covariate value', ylim = c(-1, 1))
 c2mean <- apply(C[,2,], 2, mean, na.rm = T)
 lines(c2mean, type = 'l', col = '#5a95a6', lwd = 2)
 c3mean <- apply(C[,3,], 2, mean, na.rm = T)
@@ -54,16 +118,26 @@ dev.off()
 
 
 ######################### data 
-load("gzresalt_newpr2.RData")  # tune BIO = 0.5 tune b1 = 0.5
+load("gzresalt_centerts.RData")  # tune BIO = 0.5 tune b1 = 0.5
 Bin = chaindat$Bin; Bout = chaindat$Bout; w = chaindat$w; X = chaindat$X; phi = chaindat$phi; s2 = chaindat$s2; t2 = chaindat$t2; sigmaZ = chaindat$sigmaZ; B1 = chaindat$B1; alpha = chaindat$alpha; sigma0 = chaindat$sigma0; mu0 = chaindat$mu0; C = chaindat$C; Y = chaindat$Y
-N = 50000
-burnin = 5000
+N = 70000
+burnin = 20000
 thin = 5
 select = seq(burnin, N, by = thin)
 n =  36
 TT = 30
 p = 2
 
+
+
+effectiveSize(Bin[select])
+effectiveSize(as.mcmc(Bout[select]))
+effectiveSize(as.mcmc(t2[select]))
+effectiveSize(as.mcmc(s2[select]))
+effectiveSize(as.mcmc(B1[1, select]))
+effectiveSize(as.mcmc(B1[2, select]))
+effectiveSize(as.mcmc(B1[3, select]))
+effectiveSize(as.mcmc(phi[1, select]))
 ########### geweke
 library(coda)
 f1 = 0.1
@@ -116,14 +190,14 @@ heidel.diag(sigmaZ[3, select])
 
 
 
-
 #################### MCMC  plots 
-
+xlabel = seq(0, 70000, 10000)
 ### auto
 for (var in c("Bin", "Bout","s2", "t2")){
   pdf(paste0("figs/", var, ".pdf"), width = 8, height = 4)
   par(mfrow = c(1, 1))
-  plot(chaindat[[var]][1:N], type = 'l', col = 'black', lwd = 1, xlab = 'iteration', ylab = var)
+  plot(chaindat[[var]][1:N], type = 'l', col = 'black', lwd = 1, xaxt = "n", xlab = 'iteration', ylab = var)
+  axis(1, at = xlabel, labels = xlabel * 10)
   # plot(density(chaindat[[var]][select]), col = 'black', lwd = 2, xlab = var, main = '')
   dev.off()
 }
@@ -136,7 +210,8 @@ for (var in c("phi", "sigmaZ", "B1")){
     varn = var
     if (var == 'B1') {varn = 'B'}
     if (var == 'sigmaZ') {varn = 'sigmac'}
-    plot(chaindat[[var]][i,1:N], type = 'l', col = 'black', lwd = 1, xlab = 'iteration', ylab = paste0(varn, i))
+    plot(chaindat[[var]][i,1:N], type = 'l', col = 'black', lwd = 1,  xaxt = "n",xlab = 'iteration', ylab = paste0(varn, i))
+    axis(1, at = xlabel, labels = xlabel * 10)
     # plot(density(chaindat[[var]][i,select]), col = 'black', lwd = 2, xlab = var, main = '')
     dev.off()
   }
@@ -194,14 +269,14 @@ Es0;Em0
 
 
 es <- data.frame(mean = c( EB1[1], EB1[2], EB1[3], EBin, EBout, Es2, Et2,
-                          Ephi[1], Ephi[2], Ephi[3], 
-                          EsigmaZ[1], EsigmaZ[2], EsigmaZ[3]))
+                           Ephi[1], Ephi[2], Ephi[3], 
+                           EsigmaZ[1], EsigmaZ[2], EsigmaZ[3]))
 es$lower <- c( qB11[1], qB12[1], qB13[1], 
-              qBin[1], qBout[1], qs2[1], qt2[1], 
-              qphi1[1], qphi2[1], qphi3[1], qsigmaZ1[1], qsigmaZ2[1], qsigmaZ3[1])
+               qBin[1], qBout[1], qs2[1], qt2[1], 
+               qphi1[1], qphi2[1], qphi3[1], qsigmaZ1[1], qsigmaZ2[1], qsigmaZ3[1])
 es$upper <- c( qB11[2], qB12[2], qB13[2], 
-              qBin[2], qBout[2], qs2[2], qt2[2], 
-              qphi1[2], qphi2[2], qphi3[2], qsigmaZ1[2], qsigmaZ2[2], qsigmaZ3[2])
+               qBin[2], qBout[2], qs2[2], qt2[2], 
+               qphi1[2], qphi2[2], qphi3[2], qsigmaZ1[2], qsigmaZ2[2], qsigmaZ3[2])
 es$var <- c('B1_1', 'B1_2', 'B1_3', 'Bin', 'Bout', 's2', 't2', 'phi_1', 'phi_2', 'phi_3', 'sigmaZ_1', 'sigmaZ_2', 'sigmaZ_3')
 es
 
@@ -210,6 +285,29 @@ library(kableExtra)
 kable(es[,c(4, 1:3)], format = "html", caption = "Formatted Table for PowerPoint") %>%
   kable_styling(full_width = FALSE, position = "center") %>%
   row_spec(0, bold = TRUE) # Make the header bold
+
+
+
+##################### ar1 residual autocor
+
+
+eps <- array(NA, dim = c(n, ncov, TT))
+
+for (k in 1:ncov) {
+  for (i in 1:n) {
+    eps[i, k, 1] <- C[i, k, 1] - Em0[k]
+    for (t in 2:TT) {
+      eps[i, k, t] <- C[i, k, t] - Ephi[k] * C[i, k, t-1]
+    }
+  }
+}
+
+par(mfrow = c(ncov, 1))
+names = c('social', 'happy', 'pressure')
+for (k in 1:ncov) {
+  acf(as.vector(eps[, k, ]), main = paste("ACF residuals for ", names[k]))
+}
+
 
 ################## plot of predictors against Y
 
@@ -254,7 +352,7 @@ ggplot(data, aes(x=dist))+
   theme_minimal(base_size = 18) + 
   theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
         panel.border = element_rect(colour = "black", fill=NA, size=0.5))
-  xlab("distance between latent positions") +
+xlab("distance between latent positions") +
   ylab("density")
 dev.off()
 
@@ -313,27 +411,54 @@ xl <- c(1.15*min(EX[1,,]),1.15*max(EX[1,,]))
 yl <- c(1.15*min(EX[2,,]),1.15*max(EX[2,,]))
 lims <- range(c(xl,yl))
 
-pdf(file="figs/lps.pdf",width=8,height=8)
+pdf(file="figs/lps_wp.pdf",width=8,height=8)
 par(mar=c(2,2,4,2))
+color_scale <- colorRampPalette(c("#addfed", "#0f414f"))
+C_min <- min(C[,1,], na.rm=TRUE)
+C_max <- max(C[,1,], na.rm=TRUE)
+C_scaled <- (C[,1,] - C_min) / (C_max - C_min + 1e-6) # Avoid division by zero
+colors <- color_scale(100) # Generate 100 colors
+
 for(tt in 1:TT){
-  plot(t(EX[,tt,]),xlim=lims,ylim=lims,xlab="",ylab="",
-       pch=16,cex=C[, 1, tt]*0.15,xaxt="n",yaxt="n",
-       main="")
-  if(tt>1) arrows(EX[1,tt-1,],EX[2,tt-1,],EX[1,tt,],EX[2,tt,],length=0, col = 'blue')
-#  if(tt==1) textxy(EX[1,tt,],EX[2,tt,],labs=c(1:26)[-21]) #load "calibrate" package
-  if(tt<TT) par(new=TRUE)
+  # Determine colors based on C values
+  col_vec <- colors[round(C_scaled[ , tt] * 99) + 1]  # Map to color index
+  
+  plot(t(EX[,tt,]), xlim=lims, ylim=lims, xlab="", ylab="", 
+       pch=16, cex=1, col=col_vec, xaxt="n", yaxt="n", main="")
+  
+  # if(tt > 1) arrows(EX[1,tt-1,], EX[2,tt-1,], EX[1,tt,], EX[2,tt,], 
+  #                   length=0, col='blue')
+  
+  if(tt < TT) par(new=TRUE)
 }
+for(tt in 1:TT){
+  if(tt > 1){
+    arrows(EX[1,tt-1,], EX[2,tt-1,], EX[1,tt,], EX[2,tt,], 
+           length=0, col='blue')
+  } 
+  if (tt == TT){
+    arrows(EX[1,tt-1,], EX[2,tt-1,], EX[1,tt,], EX[2,tt,], 
+           length=0.1, col='blue')
+  }
+  if(tt < TT) par(new=TRUE)
+}
+
 dev.off()
 
 
-pdf(file="figs/lpsff.pdf",width=8,height=8)
+
+
+
+pdf(file="figs/lpsff_wp.pdf",width=8,height=8)
 par(mar=c(2,2,4,2))
+col_vec <- colors[round(C_scaled[ , 1] * 99) + 1] 
 plot(t(EX[,1,]),xlim=lims,ylim=lims,xlab="",ylab="",
-     pch=16,cex=C[, 1, 1]*0.15,xaxt="n",yaxt="n",
+     pch=16,cex=1,xaxt="n",yaxt="n",col = col_vec,
      main="")
 par(new=TRUE)
+col_vec <- colors[round(C_scaled[, TT] * 99) + 1] 
 plot(t(EX[,TT,]),xlim=lims,ylim=lims,xlab="",ylab="",
-     pch=16,cex=C[, 1, TT]*0.15,xaxt="n",yaxt="n",
+     pch=16,cex=1,xaxt="n",yaxt="n", col = col_vec,
      main="")
 arrows(EX[1,1,],EX[2,1,],EX[1,TT,],EX[2,TT,],length=0.05, col = 'blue', code = 2)
 dev.off()
@@ -416,6 +541,28 @@ if(MissData){
   AUCPMean <- slot(performance( pred, "auc"),"y.values")[[1]]  
 }
 print(AUCPMean) #0.9777968 0.9777008
+pr_curve <- performance(pred, "prec", "rec")
+plot(pr_curve, colorize = TRUE)
+precision <- pr_curve@y.values[[1]]
+recall    <- pr_curve@x.values[[1]]
+threshold <- pr_curve@alpha.values[[1]]
+f1 <- 2 * precision * recall / (precision + recall)
+
+# remove NA values
+valid <- which(!is.na(f1))
+best_idx <- valid[which.max(f1[valid])]
+best_threshold <- threshold[best_idx]
+best_precision <- precision[best_idx]
+best_recall    <- recall[best_idx]
+
+best_threshold
+best_precision
+best_recall
+plot(pr_curve, colorize = TRUE)
+abline(v=best_recall, col='#5a95a6')
+abline(h=best_precision, col='#5a95a6')
+text(0.85, 0.91, paste0('cutoff = ', round(best_threshold,3)), cex = 1)
+
 set.seed(100)
 predYbin <- ifelse(predY>runif(Y), 1,0) 
 mean(predYbin == Y) #0.8907047  0.8904029
@@ -427,11 +574,11 @@ cutoffs <- cutoffs[order(cutoffs$tpr+cutoffs$fpr , decreasing=TRUE),]
 cf = subset(cutoffs, fpr < 0.1)[1,]
 
 
-pdf("figsnew/ROC.pdf", width = 6, height = 6)
+pdf("figs/ROC.pdf", width = 6, height = 6)
 par(mar=c(5,5,2,2))
 plot(perf, lwd = 2, cex.lab = 1.5, cex.axis = 1,
      xlab = 'false positive rate', ylab = 'true positive rate')
-text(0.21, 0.91, paste0('cutoff = ', round(cf[1],3)), cex = 1)
+text(0.32, 0.95, paste0('cutoff = ', round(cf[1],3)), cex = 1)
 abline(v=cf[2], col='#5a95a6')
 abline(h=cf[3], col='#5a95a6')
 dev.off()
